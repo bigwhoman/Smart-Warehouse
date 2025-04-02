@@ -25,7 +25,7 @@ uint8_t qrBuffer[QR_BUFFER_SIZE];
 size_t qrSize = 0;
 
 // Server details
-const char* serverAddress = "http://172.20.10.13:5432/qr.h";
+const char* serverAddress = "http://172.20.10.13:8080/getqr";
 
 // WiFi credentials - replace with your network details
 const char* ssid = "HIP";
