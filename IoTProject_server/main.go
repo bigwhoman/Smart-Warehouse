@@ -13,13 +13,13 @@ var running_port = "8080"
 func main() {
 	util.GenerateQRhexCode()
 	fmt.Println("Starting server...")
-	//til.Initializedatabase()
+	util.Initializedatabase()
 	handleRequests()
 }
 func handleRequests() {
 	router := mux.NewRouter().StrictSlash(true)
-	// router.HandleFunc("/signup", API.Signup)
-	// router.HandleFunc("/login", API.Login)
+	router.HandleFunc("/signup", API.Signup)
+	router.HandleFunc("/login", API.Login)
 	router.HandleFunc("/getqr", API.GetQRImage)
 	http.ListenAndServe(":"+running_port, router)
 }
