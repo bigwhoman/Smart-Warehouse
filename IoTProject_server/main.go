@@ -11,18 +11,19 @@ import (
 var running_port = "8080"
 
 func main() {
+
 	util.GenerateQRhexCode()
 	fmt.Println("Starting server...")
 	util.Initializedatabase()
-	b, e := util.IsBoxRented(util.DataBase, "AAs12")
-	fmt.Println(e)
-	fmt.Println(b)
 	handleRequests()
 }
 func handleRequests() {
 	router := mux.NewRouter().StrictSlash(true)
 	router.HandleFunc("/signup", API.Signup)
 	router.HandleFunc("/login", API.Login)
-	//router.HandleFunc("/getqr", API.GetQRImage)
+	router.HandleFunc("/rentbox", API.RentBoxRequest)
+	router.HandleFunc("/sendqr", API.SendingQR)
+	router.HandleFunc("/isrented", API.IsRented)
+	router.HandleFunc("/sendtemprature", API.SendTemperature)
 	http.ListenAndServe(":"+running_port, router)
 }

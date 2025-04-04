@@ -88,3 +88,13 @@ func InsertNewUserIntodb(db *sql.DB, user models.User) error {
 	defer insert.Close()
 	return nil
 }
+
+func RentBox(db *sql.DB, renter string, boxcode string) error {
+	query := "UPDATE boxes SET renter = " + "\"" + renter + "\"" + " WHERE boxcode=" + "\"" + boxcode + "\""
+	_, err := db.Query(query)
+	if err != nil {
+
+		return err
+	}
+	return nil
+}
