@@ -32,7 +32,7 @@ async def PowerConsumption(dev):
             1
         )  # Using asyncio.sleep instead of time.sleep in async function
         timer = timer + 1
-        if timer == 60:
+        if timer == 10:
             # Send to server
             try:
                 payload = {"code": "AAs12", "energy": total_energy}
