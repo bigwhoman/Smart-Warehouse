@@ -1,31 +1,51 @@
 import asyncio
-from kasa import Discover
+import json
 import time
-# find ip using kasa discover
 
+import requests
+from kasa import Discover
+
+
+# find ip using kasa discover
 async def discover_device():
-    dev = await Discover.discover_single("10.118.231.203", username="m.sabramooz77@gmail.com", password="mohammadreza1717")
+    dev = await Discover.discover_single(
+        "10.118.231.203",
+        username="m.sabramooz77@gmail.com",
+        password="mohammadreza1717",
+    )
     await dev.turn_on()
     await dev.update()
-
     return dev
+
 
 async def PowerConsumption(dev):
     timer = 0
-    total_energy=0
+    total_energy = 0
     while True:
         realtime_data = dev.emeter_realtime
-        current = (realtime_data["current"])
+        current = realtime_data["current"]
         power = 110.0 * current
         energy = power / 3600
         total_energy = total_energy + energy
         await dev.update()
-        time.sleep(1)
-        timer = timer+1
+        await asyncio.sleep(
+            1
+        )  # Using asyncio.sleep instead of time.sleep in async function
+        timer = timer + 1
         if timer == 60:
             # Send to server
+            try:
+                payload = {"code": "AAs12", "energy": total_energy}
+                response = requests.post(
+                    "http://10.118.231.191/sendenergy", json=payload
+                )
+                print(f"Data sent to server: {payload}")
+                print(f"Server response: {response.status_code}")
+            except Exception as e:
+                print(f"Error sending data to server: {e}")
+
             timer = 0
-            print(total_energy)
+            print(f"Total energy: {total_energy}")
             total_energy = 0
 
 
@@ -34,6 +54,5 @@ async def main_wrapper():
     await PowerConsumption(dev)
 
 
-asyncio.run(main_wrapper())  # Only one `asyncio.run()`
-
-
+if __name__ == "__main__":
+    asyncio.run(main_wrapper())  # Only one `asyncio.run()`
