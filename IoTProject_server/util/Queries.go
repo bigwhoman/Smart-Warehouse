@@ -3,6 +3,7 @@ package util
 import (
 	"IoTProject_server/models"
 	"database/sql"
+	"errors"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -27,6 +28,54 @@ func GetUserFromdbByUsername(db *sql.DB, username string) (models.User, bool, er
 		return user, true, nil
 	}
 
+}
+
+func GetBoxFromdbByBoxcode(db *sql.DB, boxcode string) (models.Box, bool, error) {
+	var box models.Box
+	query := "SELECT * FROM boxes WHERE boxcode=" + "\"" + boxcode + "\""
+	results, err := db.Query(query)
+	if err != nil {
+		return box, false, err
+	}
+	count := 0
+	for results.Next() {
+		count++
+		err = results.Scan(&box.Id, &box.BoxCode, &box.Owner, &box.Renter)
+		if err != nil {
+			return box, false, err
+		}
+	}
+	if count == 0 {
+		return box, false, nil
+	} else {
+		return box, true, nil
+	}
+}
+
+func IsBoxRented(db *sql.DB, boxcode string) (bool, error) {
+	var box models.Box
+	query := "SELECT * FROM boxes WHERE boxcode=" + "\"" + boxcode + "\""
+	results, err := db.Query(query)
+	if err != nil {
+		return false, err
+	}
+	count := 0
+	for results.Next() {
+		count++
+		err = results.Scan(&box.Id, &box.BoxCode, &box.Owner, &box.Renter)
+		if err != nil {
+			return false, err
+		}
+	}
+	if count == 0 {
+		return false, errors.New("Box is not available")
+	} else {
+		if !box.Renter.Valid {
+			return false, nil
+		} else {
+			return true, nil
+		}
+	}
 }
 
 func InsertNewUserIntodb(db *sql.DB, user models.User) error {

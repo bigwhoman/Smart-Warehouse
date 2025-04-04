@@ -32,12 +32,13 @@ func createHeaderFile(hex string) string {
 	return content
 }
 
-func GenerateQRhexCode() (string, error) {
+func GenerateQRhexCode() (string, string, error) {
 
 	var png []byte
-	png, err := qrcode.Encode(generateRandomString(16), qrcode.Medium, 240)
+	rentCode := generateRandomString(16)
+	png, err := qrcode.Encode(rentCode, qrcode.Medium, 240)
 	if err != nil {
-		return "-1", err
+		return "-1", "-1", err
 	}
 
 	qr_hex := ""
@@ -49,5 +50,5 @@ func GenerateQRhexCode() (string, error) {
 	}
 
 	hex_image_header := createHeaderFile(qr_hex)
-	return hex_image_header, nil
+	return rentCode, hex_image_header, nil
 }

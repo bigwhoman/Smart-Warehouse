@@ -123,17 +123,58 @@ func SendTemperature(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func GetQRImage(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
+//func GetQRImage(w http.ResponseWriter, r *http.Request) {
+//	if r.Method != http.MethodGet {
+//		http.Error(w, "Wrong method", http.StatusMethodNotAllowed)
+//		return
+//	}
+//	code, headerContent, err := util.GenerateQRhexCode()
+//	fmt.Println(code)
+//	if err != nil {
+//		fmt.Println("Error generating QR image")
+//		http.Error(w, "Internal error", http.StatusInternalServerError)
+//		return
+//	}
+//	w.Header().Set("Content-Type", "application/octet-stream")
+//	w.Header().Set("Content-Disposition", `attachment; filename="qr.h"`)
+//	w.Write([]byte(headerContent))
+//}
+
+func RentBoxRequest(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
 		http.Error(w, "Wrong method", http.StatusMethodNotAllowed)
 		return
 	}
-	headerContent, err := util.GenerateQRhexCode()
+	var boxRequest models.RentRequestBox
+
+	err := json.NewDecoder(r.Body).Decode(&boxRequest)
+	if err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	rentStatus, err := util.IsBoxRented(util.DataBase, boxRequest.BoxCode)
+
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if rentStatus {
+		http.Error(w, "Box already rented!", http.StatusUnauthorized)
+		return
+	}
+
+	QrCode, headerContent, err := util.GenerateQRhexCode()
+
 	if err != nil {
 		fmt.Println("Error generating QR image")
 		http.Error(w, "Internal error", http.StatusInternalServerError)
 		return
 	}
+
+	models.RentRequests[QrCode] = models.RentRequestBox{BoxCode: boxRequest.BoxCode, Time: time.Now()}
+	
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Content-Disposition", `attachment; filename="qr.h"`)
 	w.Write([]byte(headerContent))
