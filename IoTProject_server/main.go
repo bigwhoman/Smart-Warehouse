@@ -11,6 +11,7 @@ import (
 var running_port = "8080"
 
 func main() {
+
 	util.GenerateQRhexCode()
 	fmt.Println("Starting server...")
 	util.Initializedatabase()
@@ -22,5 +23,6 @@ func handleRequests() {
 	router.HandleFunc("/login", API.Login)
 	router.HandleFunc("/rentbox", API.RentBoxRequest)
 	router.HandleFunc("/sendqr", API.SendingQR)
+	router.HandleFunc("/isrented", API.IsRented)
 	http.ListenAndServe(":"+running_port, router)
 }

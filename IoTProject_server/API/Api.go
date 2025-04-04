@@ -5,7 +5,9 @@ import (
 	"IoTProject_server/util"
 	"encoding/json"
 	"fmt"
+	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"golang.org/x/crypto/bcrypt"
+	"log"
 	"net/http"
 	"time"
 )
@@ -140,6 +142,42 @@ func SendTemperature(w http.ResponseWriter, r *http.Request) {
 //	w.Write([]byte(headerContent))
 //}
 
+func IsRented(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Wrong method", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var boxRequest models.RentRequestBox
+
+	err := json.NewDecoder(r.Body).Decode(&boxRequest)
+	if err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	rentStatus, err := util.IsBoxRented(util.DataBase, boxRequest.BoxCode)
+
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if rentStatus {
+		var response models.IsRented
+		response.Response = true
+		json.NewEncoder(w).Encode(response)
+		//http.Error(w, "Box already rented!", http.StatusOK)
+		return
+	} else {
+		var response models.IsRented
+		response.Response = false
+		json.NewEncoder(w).Encode(response)
+		//http.Error(w, "Box already rented!", http.StatusOK)
+		return
+	}
+
+}
+
 func RentBoxRequest(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Wrong method", http.StatusMethodNotAllowed)
@@ -161,6 +199,9 @@ func RentBoxRequest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if rentStatus {
+		var response models.MessageBody
+		response.Response = "Rented"
+		json.NewEncoder(w).Encode(response)
 		http.Error(w, "Box already rented!", http.StatusUnauthorized)
 		return
 	}
@@ -213,6 +254,29 @@ func SendingQR(w http.ResponseWriter, r *http.Request) {
 			}
 			fmt.Println(currentUser + " rented box " + request.BoxCode + " Successfuly!")
 			w.WriteHeader(http.StatusOK)
+			// MQTT broker (replace with your Pi's IP)
+			broker := "tcp://10.118.231.196:1883"
+			topic := "notifyRent"
+			message := currentUser + " rented " + request.BoxCode
+			opts := mqtt.NewClientOptions()
+			opts.AddBroker(broker)
+			opts.SetClientID("go-client-" + fmt.Sprint(time.Now().Unix()))
+			opts.SetConnectTimeout(5 * time.Second)
+
+			client := mqtt.NewClient(opts)
+
+			// Connect to broker
+			if token := client.Connect(); token.Wait() && token.Error() != nil {
+				log.Fatal("❌ Connection error:", token.Error())
+			}
+			fmt.Println("✅ Connected to MQTT broker")
+
+			// Publish the message
+			token := client.Publish(topic, 0, false, message)
+			token.Wait()
+			fmt.Println("📤 Message published:", message)
+
+			client.Disconnect(250)
 		} else {
 			delete(models.RentRequests, sendBackQR.Code)
 			http.Error(w, "Invalid code", http.StatusBadRequest)
