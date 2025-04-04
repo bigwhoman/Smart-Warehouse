@@ -24,5 +24,6 @@ func handleRequests() {
 	router.HandleFunc("/rentbox", API.RentBoxRequest)
 	router.HandleFunc("/sendqr", API.SendingQR)
 	router.HandleFunc("/isrented", API.IsRented)
+	router.HandleFunc("/sendtemprature", API.SendTemperature)
 	http.ListenAndServe(":"+running_port, router)
 }

@@ -7,3 +7,8 @@ type MessageBody struct {
 type IsRented struct {
 	Response bool `json:"response"`
 }
+
+type SendTemprature struct {
+	BoxCode     string  `json:"code"`
+	Temperature float32 `json:"temperature"`
+}

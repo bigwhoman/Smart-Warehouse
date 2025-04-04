@@ -122,25 +122,22 @@ func Login(w http.ResponseWriter, r *http.Request) {
 }
 
 func SendTemperature(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Wrong method", http.StatusMethodNotAllowed)
+		return
+	}
 
+	var user_input models.SendTemprature
+	err := json.NewDecoder(r.Body).Decode(&user_input)
+	if err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+	fmt.Println(user_input.BoxCode)
+	fmt.Println(user_input.Temperature)
+	w.WriteHeader(http.StatusOK)
+	fmt.Println("Login successful")
 }
-
-//func GetQRImage(w http.ResponseWriter, r *http.Request) {
-//	if r.Method != http.MethodGet {
-//		http.Error(w, "Wrong method", http.StatusMethodNotAllowed)
-//		return
-//	}
-//	code, headerContent, err := util.GenerateQRhexCode()
-//	fmt.Println(code)
-//	if err != nil {
-//		fmt.Println("Error generating QR image")
-//		http.Error(w, "Internal error", http.StatusInternalServerError)
-//		return
-//	}
-//	w.Header().Set("Content-Type", "application/octet-stream")
-//	w.Header().Set("Content-Disposition", `attachment; filename="qr.h"`)
-//	w.Write([]byte(headerContent))
-//}
 
 func IsRented(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
