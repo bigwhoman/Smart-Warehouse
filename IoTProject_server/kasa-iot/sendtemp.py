@@ -1,5 +1,7 @@
 import json
 import logging
+import time
+from collections import deque
 
 import paho.mqtt.client as mqtt
 import requests
@@ -23,6 +25,12 @@ MQTT_PASSWORD = None  # Set if your broker requires authentication
 API_ENDPOINT = "http://10.118.231.191:8080/sendtemperature"
 API_CODE = "AAs12"
 
+# Data collection
+temperature_buffer = []
+flame_buffer = deque(maxlen=8)  # Track last 8 flame readings
+TEMP_BUFFER_SIZE = 10  # Number of temperature readings to average
+FLAME_THRESHOLD = 4  # Number of flame detections to trigger alert
+
 
 # Callback for when the client receives a CONNACK response from the server
 def on_connect(client, userdata, flags, rc):
@@ -35,8 +43,52 @@ def on_connect(client, userdata, flags, rc):
         logger.error(f"Failed to connect to MQTT broker with code: {rc}")
 
 
-avg_temp = 0
-avg_num = 1
+# Function to send temperature data to API
+def send_temperature_data(temperature):
+    try:
+        # Prepare the data to send to the API
+        api_data = {"code": API_CODE, "temperature": temperature}
+
+        # Send the data to the API
+        response = requests.post(API_ENDPOINT, json=api_data)
+
+        # Check the response
+        if response.status_code == 200:
+            logger.info(
+                f"Successfully sent average temperature data ({temperature}) to API: {response.text}"
+            )
+        else:
+            logger.error(
+                f"Failed to send data. Status code: {response.status_code}, Response: {response.text}"
+            )
+
+    except requests.RequestException as e:
+        logger.error(f"Request error when sending data to API: {str(e)}")
+    except Exception as e:
+        logger.error(f"Unexpected error: {str(e)}")
+
+
+# Function to send flame alert
+def send_flame_alert():
+    try:
+        # Prepare the data to send flame alert
+        api_data = {"code": API_CODE, "alert": "flame_up"}
+
+        # For this example, we'll use the same endpoint
+        # In a real application, you might have a different endpoint for alerts
+        response = requests.post(API_ENDPOINT, json=api_data)
+
+        if response.status_code == 200:
+            logger.info(f"Successfully sent flame alert to API: {response.text}")
+        else:
+            logger.error(
+                f"Failed to send flame alert. Status code: {response.status_code}, Response: {response.text}"
+            )
+
+    except requests.RequestException as e:
+        logger.error(f"Request error when sending flame alert: {str(e)}")
+    except Exception as e:
+        logger.error(f"Unexpected error: {str(e)}")
 
 
 # Callback for when a message is received from the server
@@ -49,45 +101,54 @@ def on_message(client, userdata, msg):
         # Parse the JSON data
         data = json.loads(payload)
 
-        # Extract the temperature value
+        # Extract the temperature value and flame status
         temperature = data.get("temperature")
         device_id = data.get("id")
         flame_detected = data.get("flame", False)
 
         if temperature is not None:
-            if avg_num < 10:
-                avg_num += 1
-                avg_temp += float(temperature)
-            avg_temp /= avg_num
-            # Prepare the data to send to the API
-            api_data = {"code": API_CODE, "temperature": avg_temp}
-
-            # Log additional information
+            # Add temperature to buffer
+            temperature_buffer.append(temperature)
             logger.info(
-                f"Device ID: {device_id}, Temperature: {avg_temp}, Flame Detected: {flame_detected}"
+                f"Added temperature {temperature} to buffer. Buffer size: {len(temperature_buffer)}/{TEMP_BUFFER_SIZE}"
             )
-            avg_temp = 0
-            avg_num = 1
 
-            # Send the data to the API
-            response = requests.post(API_ENDPOINT, json=api_data)
+            # Add flame status to buffer
+            flame_buffer.append(flame_detected)
+            flame_count = sum(1 for f in flame_buffer if f)
+            logger.info(
+                f"Flame status: {flame_detected}. Total flames in buffer: {flame_count}/{len(flame_buffer)}"
+            )
 
-            # Check the response
-            if response.status_code == 200:
+            # Check if flame threshold is exceeded
+            if len(flame_buffer) >= 8 and flame_count > FLAME_THRESHOLD:
+                logger.warning(
+                    f"FLAME ALERT! {flame_count} flames detected in last {len(flame_buffer)} readings"
+                )
+                send_flame_alert()
+                # Reset flame buffer after sending alert
+                flame_buffer.clear()
+
+            # Check if we have enough temperature readings to calculate average
+            if len(temperature_buffer) >= TEMP_BUFFER_SIZE:
+                avg_temperature = sum(temperature_buffer) / len(temperature_buffer)
+                avg_temperature = round(avg_temperature, 2)  # Round to 2 decimal places
+
                 logger.info(
-                    f"Successfully sent temperature data to API: {response.text}"
+                    f"Calculated average temperature: {avg_temperature} from {len(temperature_buffer)} readings"
                 )
-            else:
-                logger.error(
-                    f"Failed to send data. Status code: {response.status_code}, Response: {response.text}"
-                )
+
+                # Send the average temperature
+                send_temperature_data(avg_temperature)
+
+                # Clear the temperature buffer after sending
+                temperature_buffer.clear()
+
         else:
             logger.warning("Temperature value not found in the message")
 
     except json.JSONDecodeError:
         logger.error("Failed to parse JSON data from MQTT message")
-    except requests.RequestException as e:
-        logger.error(f"Request error when sending data to API: {str(e)}")
     except Exception as e:
         logger.error(f"Unexpected error: {str(e)}")
 
