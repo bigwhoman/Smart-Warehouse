@@ -166,7 +166,8 @@ func RentBoxRequest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	QrCode, headerContent, err := util.GenerateQRhexCode()
-
+	fmt.Println("QR code is:")
+	fmt.Println(QrCode)
 	if err != nil {
 		fmt.Println("Error generating QR image")
 		http.Error(w, "Internal error", http.StatusInternalServerError)
@@ -174,8 +175,50 @@ func RentBoxRequest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	models.RentRequests[QrCode] = models.RentRequestBox{BoxCode: boxRequest.BoxCode, Time: time.Now()}
-	
+
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Content-Disposition", `attachment; filename="qr.h"`)
 	w.Write([]byte(headerContent))
+}
+
+func SendingQR(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Wrong method", http.StatusMethodNotAllowed)
+		return
+	}
+	var sendBackQR models.SendBackQR
+	err := json.NewDecoder(r.Body).Decode(&sendBackQR)
+
+	if err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+	}
+
+	request, ok := models.RentRequests[sendBackQR.Code]
+	if ok {
+		currentTime := time.Now()
+		if currentTime.Sub(request.Time) < time.Second*60 {
+			cookie, err := r.Cookie("session")
+			if err != nil {
+				fmt.Println(err.Error())
+				http.Error(w, "Internal error", http.StatusInternalServerError)
+				return
+			}
+
+			currentUser := models.DBSessions[cookie.Value].Un
+			err = util.RentBox(util.DataBase, currentUser, request.BoxCode)
+			if err != nil {
+				fmt.Println(err.Error())
+				http.Error(w, "Internal error", http.StatusInternalServerError)
+				return
+			}
+			fmt.Println(currentUser + " rented box " + request.BoxCode + " Successfuly!")
+			w.WriteHeader(http.StatusOK)
+		} else {
+			delete(models.RentRequests, sendBackQR.Code)
+			http.Error(w, "Invalid code", http.StatusBadRequest)
+		}
+	} else {
+		http.Error(w, "Invalid code", http.StatusBadRequest)
+	}
+
 }
