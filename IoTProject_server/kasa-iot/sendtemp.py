@@ -35,6 +35,10 @@ def on_connect(client, userdata, flags, rc):
         logger.error(f"Failed to connect to MQTT broker with code: {rc}")
 
 
+avg_temp = 0
+avg_num = 1
+
+
 # Callback for when a message is received from the server
 def on_message(client, userdata, msg):
     try:
@@ -51,13 +55,19 @@ def on_message(client, userdata, msg):
         flame_detected = data.get("flame", False)
 
         if temperature is not None:
+            if avg_num < 10:
+                avg_num += 1
+                avg_temp += float(temperature)
+            avg_temp /= avg_num
             # Prepare the data to send to the API
-            api_data = {"code": API_CODE, "temperature": temperature}
+            api_data = {"code": API_CODE, "temperature": avg_temp}
 
             # Log additional information
             logger.info(
-                f"Device ID: {device_id}, Temperature: {temperature}, Flame Detected: {flame_detected}"
+                f"Device ID: {device_id}, Temperature: {avg_temp}, Flame Detected: {flame_detected}"
             )
+            avg_temp = 0
+            avg_num = 1
 
             # Send the data to the API
             response = requests.post(API_ENDPOINT, json=api_data)
