@@ -142,6 +142,7 @@ func SendTemperature(w http.ResponseWriter, r *http.Request) {
 	temp.Time = time_now
 	err = util.InsertTempretureIntodb(util.DataBase, temp)
 	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
 		fmt.Println(err)
 	}
 	w.WriteHeader(http.StatusOK)
