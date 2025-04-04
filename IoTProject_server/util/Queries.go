@@ -4,6 +4,7 @@ import (
 	"IoTProject_server/models"
 	"database/sql"
 	"errors"
+	"fmt"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -76,6 +77,16 @@ func IsBoxRented(db *sql.DB, boxcode string) (bool, error) {
 			return true, nil
 		}
 	}
+}
+
+func InsertTempretureIntodb(db *sql.DB, temp models.Temprature) error {
+	query := "INSERT INTO tempratures VALUES (" + "NULL" + "," + "\"" + temp.Time + "\"" + "," + "\"" + fmt.Sprintf("%f", 123.456) + "\"" + "," + "\"" + string(temp.Boxcode) + "\"" + ")"
+	insert, err := db.Query(query)
+	if err != nil {
+		return err
+	}
+	defer insert.Close()
+	return nil
 }
 
 func InsertNewUserIntodb(db *sql.DB, user models.User) error {

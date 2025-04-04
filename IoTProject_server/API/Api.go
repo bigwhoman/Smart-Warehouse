@@ -135,6 +135,15 @@ func SendTemperature(w http.ResponseWriter, r *http.Request) {
 	}
 	fmt.Println(user_input.BoxCode)
 	fmt.Println(user_input.Temperature)
+	time_now := time.Now().Format("2006-01-02 15:04:05")
+	temp := models.Temprature{}
+	temp.Boxcode = user_input.BoxCode
+	temp.Temperature = user_input.Temperature
+	temp.Time = time_now
+	err = util.InsertTempretureIntodb(util.DataBase, temp)
+	if err != nil {
+		fmt.Println(err)
+	}
 	w.WriteHeader(http.StatusOK)
 	fmt.Println("Login successful")
 }
