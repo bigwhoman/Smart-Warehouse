@@ -23,8 +23,8 @@ MQTT_USERNAME = None  # Set if your broker requires authentication
 MQTT_PASSWORD = None  # Set if your broker requires authentication
 
 # API Configuration
-API_ENDPOINT = "http://10.118.231.191:8080/sendtemperature"
-FLAME_API_ENDPOINT = "http://10.118.231.191:8080/flame"
+API_ENDPOINT = "http://10.68.147.191:8080/sendtemperature"
+FLAME_API_ENDPOINT = "http://10.68.147.191:8080/flame"
 API_CODE = "AAs12"
 
 # Data collection
