@@ -15,7 +15,7 @@ logger = logging.getLogger("temperature_monitor")
 # MQTT Configuration
 MQTT_BROKER = "localhost"  # Change to your MQTT broker address
 MQTT_PORT = 1883
-MQTT_TOPIC = "temperature"
+MQTT_TOPIC = "chomp_topic"
 MQTT_USERNAME = None  # Set if your broker requires authentication
 MQTT_PASSWORD = None  # Set if your broker requires authentication
 
