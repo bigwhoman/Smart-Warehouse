@@ -2,7 +2,7 @@
     ESP32 Cheap Yellow Display Button with QR Code Display
     
     Merges button functionality with QR code download and display
-    when the button is pressed.
+    when the button is pressed. Also checks rental status.
  *******************************************************************/
 
 // ----------------------------
@@ -47,11 +47,12 @@ uint8_t qrBuffer[QR_BUFFER_SIZE];
 size_t qrSize = 0;
 
 // Server details
-const char* serverAddress = "http://172.20.10.13:8080/getqr";
+const char* serverAddress = "http://10.118.231.191:8080/rentbox";
+const char* isRentedEndpoint = "http://10.118.231.191:8080/isrented";
 
 // WiFi credentials - replace with your network details
-const char* ssid = "HIP";
-const char* password = "bullshit1";
+const char* ssid = "Pixel_4291";
+const char* password = "mohammadrezam";
 
 // ----------------------------
 // Global variables
@@ -64,8 +65,9 @@ PNG png; // PNG decoder instance
 int16_t xpos = 0;
 int16_t ypos = 0;
 bool showingQR = false;
+bool isBoxRented = false;
 unsigned long qrDisplayStartTime = 0;
-const unsigned long QR_DISPLAY_DURATION = 2 * 60 * 1000; // Show QR for 10 seconds
+const unsigned long QR_DISPLAY_DURATION = 60 * 1000; // Show QR for 60 seconds
 unsigned long lastCountdownUpdate = 0; // For tracking countdown timer updates
 
 // ----------------------------
@@ -77,6 +79,9 @@ void displayQRCode();
 void drawButton();
 void pngDraw(PNGDRAW *pDraw);
 void updateCountdownTimer(int secondsLeft);
+bool checkIfRented();
+void displayAlreadyRentedScreen();
+bool connectToWiFi();
 
 // ----------------------------
 // Setup
@@ -95,19 +100,42 @@ void setup() {
   tft.setFreeFont(&FreeMono18pt7b);
 
   // Connect to WiFi
+  if (connectToWiFi()) {
+    // Check rental status
+    isBoxRented = checkIfRented();
+    
+    if (isBoxRented) {
+      // Show "Already Rented" screen
+      displayAlreadyRentedScreen();
+    } else {
+      // Show rent button
+      drawButton();
+    }
+  } else {
+    // WiFi connection failed, but we'll retry in the loop
+    tft.fillScreen(TFT_BLACK);
+    drawButton();
+  }
+}
+
+// ----------------------------
+// Connect to WiFi function
+// ----------------------------
+bool connectToWiFi() {
   WiFi.begin(ssid, password);
   Serial.print("Connecting to WiFi");
-  
+  tft.fillScreen(TFT_BLACK); 
   // Show connecting message on screen
   tft.setTextColor(TFT_WHITE, TFT_BLACK);
   tft.setTextSize(1);
-  tft.drawString("Connecting to WiFi...", 20, 50);
+  tft.drawString("Connecting to ", 20, 50);
+  tft.drawString("WiFi", 20, 100);
   
   int dots = 0;
   while (WiFi.status() != WL_CONNECTED && dots < 20) {
     delay(500);
     Serial.print(".");
-    tft.drawString(".", 20 + (dots * 10), 70);
+    tft.drawString(".", 20 + (dots * 10), 130);
     dots++;
   }
   
@@ -121,6 +149,7 @@ void setup() {
     tft.drawString("WiFi connected", 20, 50);
     tft.drawString(WiFi.localIP().toString(), 20, 80);
     delay(1000);
+    return true;
   } else {
     Serial.println("WiFi connection failed");
     tft.fillScreen(TFT_BLACK);
@@ -128,10 +157,8 @@ void setup() {
     tft.drawString("WiFi connection failed", 20, 50);
     tft.drawString("Check credentials", 20, 80);
     delay(3000);
+    return false;
   }
-
-  tft.fillScreen(TFT_BLACK);
-  drawButton();
 }
 
 // ----------------------------
@@ -161,54 +188,100 @@ void drawButton() {
 }
 
 // ----------------------------
+// Display Already Rented Screen
+// ----------------------------
+void displayAlreadyRentedScreen() {
+  tft.fillScreen(TFT_BLACK);
+  tft.setTextColor(TFT_WHITE);
+  tft.setTextSize(2);
+  
+  // Center the text
+  int textX = tft.width() / 2 - 140;
+  int textY = tft.height() / 2 - 50;
+  
+  tft.drawString("Already", textX, textY);
+  tft.drawString("Rented", textX, textY + 60);
+}
+
+// ----------------------------
+// Check if box is rented
+// ----------------------------
+bool checkIfRented() {
+  bool rented = false;
+  
+  if (WiFi.status() == WL_CONNECTED) {
+    HTTPClient http;
+    
+    Serial.print("Checking rental status at: ");
+    Serial.println(isRentedEndpoint);
+    
+    http.begin(isRentedEndpoint);
+    http.addHeader("Content-Type", "application/json");
+    String payload = "{\"code\":\"AAs12\"}";
+    int httpCode = http.POST(payload);
+    
+    if (httpCode == HTTP_CODE_OK) {
+      String response = http.getString();
+      Serial.print("Response: ");
+      Serial.println(response);
+      
+      // Parse JSON response
+      if (response.indexOf("\"response\":true") >= 0) {
+        rented = true;
+      } else {
+        rented = false; 
+      }
+    } else {
+      Serial.print("HTTP request failed, error: ");
+      Serial.println(httpCode);
+    }
+    
+    http.end();
+  } else {
+    Serial.println("WiFi not connected");
+  }
+  
+  return rented;
+}
+
+// ----------------------------
 // Main loop
 // ----------------------------
 void loop() {
-  if(WiFi.status() != WL_CONNECTED ){
-
-
-  
-  tft.fillScreen(TFT_BLACK);
-  tft.setFreeFont(&FreeMono18pt7b);
-
-  // Connect to WiFi
-  WiFi.begin(ssid, password);
-  Serial.print("Connecting to WiFi");
-  
-  // Show connecting message on screen
-  tft.setTextColor(TFT_WHITE, TFT_BLACK);
-  tft.setTextSize(1);
-  tft.drawString("Connecting to WiFi...", 20, 50);
-  
-  int dots = 0;
-  while (WiFi.status() != WL_CONNECTED && dots < 20) {
-    delay(500);
-    Serial.print(".");
-    tft.drawString(".", 20 + (dots * 10), 70);
-    dots++;
-  }
-  
-  Serial.println();
-  
-  if (WiFi.status() == WL_CONNECTED) {
-    Serial.println("WiFi connected");
-    Serial.println("IP address: ");
-    Serial.println(WiFi.localIP());
-    tft.fillScreen(TFT_BLACK);
-    tft.drawString("WiFi connected", 20, 50);
-    tft.drawString(WiFi.localIP().toString(), 20, 80);
-    delay(1000);
-  } else {
-    Serial.println("WiFi connection failed");
-    tft.fillScreen(TFT_BLACK);
-    tft.setTextColor(TFT_RED);
-    tft.drawString("WiFi connection failed", 20, 50);
-    tft.drawString("Check credentials", 20, 80);
-    delay(3000);
+  // Check if WiFi is connected, if not, try to reconnect
+  if (WiFi.status() != WL_CONNECTED) {
+    connectToWiFi();
   }
 
-  tft.fillScreen(TFT_BLACK);
-  drawButton();
+  // Periodically check rental status (every 30 seconds)
+  static unsigned long lastRentCheckTime = 0;
+  if (millis() - lastRentCheckTime > 30000) {
+    lastRentCheckTime = millis();
+    
+    // Only check if we're not currently showing QR
+    if (!showingQR && WiFi.status() == WL_CONNECTED) {
+      bool currentStatus = checkIfRented();
+      
+      // If status changed
+      if (currentStatus != isBoxRented) {
+        isBoxRented = currentStatus;
+        
+        if (isBoxRented) {
+          // Show "Already Rented" screen
+          displayAlreadyRentedScreen();
+        } else {
+          // Show rent button
+          tft.fillScreen(TFT_BLACK);
+          drawButton();
+        }
+      }
+    }
+  }
+  
+  // Skip the rest of the loop if box is rented
+  if (isBoxRented && !showingQR) {
+    delay(100);
+    return;
   }
 
   // If currently showing QR code, update countdown and check if we should go back to button
@@ -227,8 +300,17 @@ void loop() {
     // Check if time expired
     if (timeElapsed > QR_DISPLAY_DURATION) {
       showingQR = false;
-      tft.fillScreen(TFT_BLACK);
-      drawButton();
+      // Check rental status again after QR display ends
+      isBoxRented = checkIfRented();
+      
+      if (isBoxRented) {
+        // Show "Already Rented" screen
+        displayAlreadyRentedScreen();
+      } else {
+        // Show rent button
+        tft.fillScreen(TFT_BLACK);
+        drawButton();
+      }
     }
     delay(50);
     return;
@@ -258,6 +340,7 @@ void loop() {
     if (WiFi.status() == WL_CONNECTED) {
       if (downloadQRCode()) {
         Serial.println("QR code downloaded successfully");
+        tft.setTextSize(1); // Ensure smaller text size before displaying QR
         displayQRCode();
         showingQR = true;
         qrDisplayStartTime = millis();
@@ -299,7 +382,9 @@ bool downloadQRCode() {
     Serial.println(serverAddress);
     
     http.begin(serverAddress);
-    int httpCode = http.GET();
+    http.addHeader("Content-Type", "application/json");
+    String payload = "{\"code\":\"AAs12\"}";
+    int httpCode = http.POST(payload);
     
     if (httpCode == HTTP_CODE_OK) {
       // Get the content of the QR code file
@@ -316,7 +401,7 @@ bool downloadQRCode() {
         Serial.println("Failed to parse QR code data");
       }
     } else {
-      Serial.print("HTTP GET failed, error: ");
+      Serial.print("HTTP POST failed, error: ");
       Serial.println(httpCode);
     }
     
@@ -436,19 +521,19 @@ void pngDraw(PNGDRAW *pDraw) {
 // ----------------------------
 void updateCountdownTimer(int secondsLeft) {
   // Position for the timer (to the right of QR code)
-  int timerX = xpos + MAX_IMAGE_WIDTH + 5; // Adjust spacing as needed
+  int timerX = xpos + MAX_IMAGE_WIDTH + 5; // Reduced spacing
   int timerY = ypos + 15; // Align near top of QR code
   
-  // Clear previous timer display
+  // Clear previous timer display (smaller area due to smaller fonts)
   tft.fillRect(timerX, timerY - 20, 70, 60, TFT_BLACK);
   
   // Display time remaining text
   tft.setTextColor(TFT_WHITE);
-  tft.setTextSize(1);
-  tft.drawString("Time left:", timerX, timerY - 30);
+  tft.setTextSize(1); // Keep this small for the label
+  tft.drawString("", timerX, timerY - 20); // Adjusted position
   
-  // Display seconds in large font with changing colors
-  tft.setTextSize(1);
+  // Display seconds in smaller font with changing colors
+  tft.setTextSize(1); // Small size
   
   // Change color based on time remaining
   if (secondsLeft > 7) {
@@ -464,10 +549,13 @@ void updateCountdownTimer(int secondsLeft) {
   sprintf(timeStr, "%02d sec", secondsLeft);
   tft.drawString(timeStr, timerX, timerY);
   
+  // Reset font size after drawing the timer
+  tft.setTextSize(1);
+  
   // Add some visual indication of time passing
-  int progressWidth = 60;
-  int progressHeight = 6;
-  int progressY = timerY + 30;
+  int progressWidth = 60; // Narrower progress bar
+  int progressHeight = 6; // Shorter progress bar
+  int progressY = timerY + 30; // Moved up to accommodate smaller fonts
   
   // Draw progress bar background
   tft.drawRect(timerX, progressY, progressWidth, progressHeight, TFT_WHITE);
