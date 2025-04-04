@@ -18,11 +18,13 @@ logger = logging.getLogger("temperature_monitor")
 MQTT_BROKER = "localhost"  # Change to your MQTT broker address
 MQTT_PORT = 1883
 MQTT_TOPIC = "chomp_topic"
+MQTT_ACTUATOR_TOPIC = "actuator_topic"  # New topic for publishing
 MQTT_USERNAME = None  # Set if your broker requires authentication
 MQTT_PASSWORD = None  # Set if your broker requires authentication
 
 # API Configuration
 API_ENDPOINT = "http://10.118.231.191:8080/sendtemperature"
+FLAME_API_ENDPOINT = "http://10.118.231.191:8080/flame"
 API_CODE = "AAs12"
 
 # Data collection
@@ -30,6 +32,7 @@ temperature_buffer = []
 flame_buffer = deque(maxlen=8)  # Track last 8 flame readings
 TEMP_BUFFER_SIZE = 10  # Number of temperature readings to average
 FLAME_THRESHOLD = 4  # Number of flame detections to trigger alert
+mqtt_client = None  # Global client reference
 
 
 # Callback for when the client receives a CONNACK response from the server
@@ -41,6 +44,32 @@ def on_connect(client, userdata, flags, rc):
         logger.info(f"Subscribed to topic: {MQTT_TOPIC}")
     else:
         logger.error(f"Failed to connect to MQTT broker with code: {rc}")
+
+
+# Function to publish to actuator topic
+def publish_to_actuator(avg_temperature, flame_alert=False):
+    try:
+        # Create payload for actuator
+        actuator_data = {
+            "average_temperature": avg_temperature,
+            "flame_alert": flame_alert,
+        }
+
+        # Convert to JSON string
+        payload = json.dumps(actuator_data)
+
+        # Publish to actuator topic
+        result = mqtt_client.publish(MQTT_ACTUATOR_TOPIC, payload)
+
+        if result.rc == mqtt.MQTT_ERR_SUCCESS:
+            logger.info(f"Successfully published to {MQTT_ACTUATOR_TOPIC}: {payload}")
+        else:
+            logger.error(
+                f"Failed to publish to {MQTT_ACTUATOR_TOPIC}. Error code: {result.rc}"
+            )
+
+    except Exception as e:
+        logger.error(f"Error publishing to actuator topic: {str(e)}")
 
 
 # Function to send temperature data to API
@@ -76,7 +105,7 @@ def send_flame_alert():
 
         # For this example, we'll use the same endpoint
         # In a real application, you might have a different endpoint for alerts
-        response = requests.post(API_ENDPOINT, json=api_data)
+        response = requests.post(FLAME_API_ENDPOINT, json=api_data)
 
         if response.status_code == 200:
             logger.info(f"Successfully sent flame alert to API: {response.text}")
@@ -126,6 +155,18 @@ def on_message(client, userdata, msg):
                     f"FLAME ALERT! {flame_count} flames detected in last {len(flame_buffer)} readings"
                 )
                 send_flame_alert()
+
+                # Calculate current average temperature for the actuator
+                current_avg_temp = (
+                    sum(temperature_buffer) / len(temperature_buffer)
+                    if temperature_buffer
+                    else temperature
+                )
+                current_avg_temp = round(current_avg_temp, 2)
+
+                # Publish to actuator topic with flame alert
+                publish_to_actuator(current_avg_temp, flame_alert=True)
+
                 # Reset flame buffer after sending alert
                 flame_buffer.clear()
 
@@ -141,6 +182,13 @@ def on_message(client, userdata, msg):
                 # Send the average temperature
                 send_temperature_data(avg_temperature)
 
+                # Publish to actuator topic with current flame status
+                flame_alert = False
+                if len(flame_buffer) > 0:
+                    flame_count = sum(1 for f in flame_buffer if f)
+                    flame_alert = flame_count > FLAME_THRESHOLD
+                publish_to_actuator(avg_temperature, flame_alert=flame_alert)
+
                 # Clear the temperature buffer after sending
                 temperature_buffer.clear()
 
@@ -154,32 +202,33 @@ def on_message(client, userdata, msg):
 
 
 def main():
+    global mqtt_client
     # Create MQTT client instance
-    client = mqtt.Client()
+    mqtt_client = mqtt.Client()
 
     # Set the callbacks
-    client.on_connect = on_connect
-    client.on_message = on_message
+    mqtt_client.on_connect = on_connect
+    mqtt_client.on_message = on_message
 
     # Set username and password if configured
     if MQTT_USERNAME and MQTT_PASSWORD:
-        client.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
+        mqtt_client.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
 
     try:
         # Connect to the MQTT broker
         logger.info(f"Connecting to MQTT broker at {MQTT_BROKER}:{MQTT_PORT}")
-        client.connect(MQTT_BROKER, MQTT_PORT, 60)
+        mqtt_client.connect(MQTT_BROKER, MQTT_PORT, 60)
 
         # Start the network loop
         logger.info("Starting MQTT client loop")
-        client.loop_forever()
+        mqtt_client.loop_forever()
 
     except KeyboardInterrupt:
         logger.info("Application stopped by user")
     except Exception as e:
         logger.error(f"Failed to connect to MQTT broker: {str(e)}")
     finally:
-        client.disconnect()
+        mqtt_client.disconnect()
         logger.info("Disconnected from MQTT broker")
 
 
