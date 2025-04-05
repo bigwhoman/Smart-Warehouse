@@ -47,12 +47,12 @@ uint8_t qrBuffer[QR_BUFFER_SIZE];
 size_t qrSize = 0;
 
 // Server details
-const char* serverAddress = "http://172.20.10.5:8080/rentbox";
-const char* isRentedEndpoint = "http://172.20.10.5:8080/isrented";
+const char* serverAddress = "http://10.68.147.191:8080/rentbox";
+const char* isRentedEndpoint = "http://10.68.147.191:8080/isrented";
 
 // WiFi credentials - replace with your network details
-const char* ssid = "HIP";
-const char* password = "bullshit1";
+const char* ssid = "Pixel_4291";
+const char* password = "mohammadrezam";
 
 // ----------------------------
 // Global variables

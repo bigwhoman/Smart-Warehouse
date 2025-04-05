@@ -26,12 +26,12 @@ MQTT_USERNAME = None  # Set if your broker requires authentication
 MQTT_PASSWORD = None  # Set if your broker requires authentication
 
 # API Configuration
-API_ENDPOINT = "http://172.20.10.5:8080/sendtemperature"
-FLAME_API_ENDPOINT = "http://172.20.10.5:8080/flame"
+API_ENDPOINT = "http://10.68.147.191:8080/sendtemperature"
+FLAME_API_ENDPOINT = "http://10.68.147.191:8080/flame"
 API_CODE = "AAs12"
 
 # Smart Plug Configuration
-SMART_PLUG_IP = "172.20.10.2"
+SMART_PLUG_IP = "10.68.147.203"
 SMART_PLUG_USERNAME = "m.sabramooz77@gmail.com"
 SMART_PLUG_PASSWORD = "mohammadreza1717"
 
