@@ -151,7 +151,6 @@ def publish_flame_status(flame_detected):
             flame_data = {
                 "flame_detected": flame_detected,
                 "power_cutoff": power_cutoff,
-                "rental_info": current_rental,
             }
 
             # Convert to JSON string
