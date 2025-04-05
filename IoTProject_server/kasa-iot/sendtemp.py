@@ -113,7 +113,6 @@ def publish_to_actuator(avg_temperature, flame_alert=False):
             "average_temperature": avg_temperature,
             "flame_alert": flame_alert,
             "power_cutoff": power_cutoff,
-            "rental_info": current_rental,
         }
 
         # Convert to JSON string
