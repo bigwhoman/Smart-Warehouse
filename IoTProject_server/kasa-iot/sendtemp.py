@@ -1,17 +1,11 @@
-import asyncio
 import json
 import logging
+import subprocess
 import time
-import warnings
 from collections import deque
-from threading import Event, Thread
 
 import paho.mqtt.client as mqtt
 import requests
-from kasa import Discover, SmartPlug
-
-# Ignore all DeprecationWarning messages
-warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 # Configure logging
 logging.basicConfig(
@@ -50,89 +44,38 @@ FLAME_PUBLISH_FREQUENCY = 3  # Publish flame status every 3 flame detections
 
 # Global variables
 mqtt_client = None  # Global client reference
-smart_plug_controller = None  # Global smart plug controller reference
 power_cutoff = False  # Flag to track if power is cut off
-stop_event = Event()  # Event to signal threads to stop
 
 
-# Class to handle smart plug operations
-class SmartPlugController:
-    def __init__(self, ip, username, password):
-        self.ip = ip
-        self.username = username
-        self.password = password
-        self.plug = None
-        self.initialized = False
-
-    async def initialize(self):
-        try:
-            self.plug = await Discover.discover_single(
-                self.ip, username=self.username, password=self.password
-            )
-            await self.plug.update()
-            self.initialized = True
-            logger.info(
-                f"Smart plug initialized successfully. Current state: {self.plug.is_on}"
-            )
-            return True
-        except Exception as e:
-            logger.error(f"Failed to initialize smart plug: {str(e)}")
-            return False
-
-    async def turn_off(self):
-        if not self.initialized:
-            success = await self.initialize()
-            if not success:
-                return False
-
-        try:
-            await self.plug.turn_off()
-            await self.plug.update()
-            logger.info("Smart plug turned OFF")
-            return True
-        except Exception as e:
-            logger.error(f"Failed to turn off smart plug: {str(e)}")
-            return False
-
-    async def turn_on(self):
-        if not self.initialized:
-            success = await self.initialize()
-            if not success:
-                return False
-
-        try:
-            await self.plug.turn_on()
-            await self.plug.update()
-            logger.info("Smart plug turned ON")
-            return True
-        except Exception as e:
-            logger.error(f"Failed to turn on smart plug: {str(e)}")
-            return False
-
-    async def get_status(self):
-        if not self.initialized:
-            success = await self.initialize()
-            if not success:
-                return None
-
-        try:
-            await self.plug.update()
-            return {
-                "is_on": self.plug.is_on,
-                "emeter_realtime": self.plug.emeter_realtime,
-            }
-        except Exception as e:
-            logger.error(f"Failed to get smart plug status: {str(e)}")
-            return None
-
-
-# Function to run async tasks from sync code
-def run_async_task(coro):
-    loop = asyncio.new_event_loop()
+# Function to control smart plug via external script
+def control_smart_plug(action):
     try:
-        return loop.run_until_complete(coro)
-    finally:
-        loop.close()
+        # Call the separate smart plug controller script
+        command = [
+            "python",
+            "smart_plug_controller.py",
+            action,
+            SMART_PLUG_IP,
+            SMART_PLUG_USERNAME,
+            SMART_PLUG_PASSWORD,
+        ]
+
+        result = subprocess.run(command, capture_output=True, text=True, timeout=30)
+
+        if result.returncode == 0:
+            logger.info(
+                f"Smart plug {action} command successful: {result.stdout.strip()}"
+            )
+            return True
+        else:
+            logger.error(f"Smart plug {action} command failed: {result.stderr.strip()}")
+            return False
+    except subprocess.TimeoutExpired:
+        logger.error(f"Smart plug {action} command timed out")
+        return False
+    except Exception as e:
+        logger.error(f"Error executing smart plug {action} command: {str(e)}")
+        return False
 
 
 # Callback for when the client receives a CONNACK response from the server
@@ -217,7 +160,7 @@ def handle_flame_power_cutoff():
 
     if not power_cutoff:
         logger.warning("Flame detected! Cutting off power...")
-        success = run_async_task(smart_plug_controller.turn_off())
+        success = control_smart_plug("off")
 
         if success:
             power_cutoff = True
@@ -232,7 +175,7 @@ def restore_power():
 
     if power_cutoff:
         logger.info("Restoring power...")
-        success = run_async_task(smart_plug_controller.turn_on())
+        success = control_smart_plug("on")
 
         if success:
             power_cutoff = False
@@ -400,7 +343,7 @@ def handle_control_message(payload):
                 restore_power()
             elif power_command == "off":
                 logger.info("Received command to turn power OFF")
-                run_async_task(smart_plug_controller.turn_off())
+                control_smart_plug("off")
                 power_cutoff = True
 
         # Check for reset flame alert command
@@ -415,25 +358,15 @@ def handle_control_message(payload):
         logger.error(f"Error handling control message: {str(e)}")
 
 
-# Initialize smart plug controller
-def initialize_smart_plug():
-    global smart_plug_controller
-    smart_plug_controller = SmartPlugController(
-        SMART_PLUG_IP, SMART_PLUG_USERNAME, SMART_PLUG_PASSWORD
-    )
-    return run_async_task(smart_plug_controller.initialize())
-
-
 def main():
     global mqtt_client
 
-    # Initialize smart plug
-    logger.info("Initializing smart plug...")
-    smart_plug_initialized = initialize_smart_plug()
-
-    if not smart_plug_initialized:
-        logger.error("Failed to initialize smart plug. Exiting...")
-        return
+    # Test smart plug connectivity at startup
+    logger.info("Testing smart plug connectivity...")
+    if not control_smart_plug("status"):
+        logger.warning(
+            "Could not connect to smart plug. Will continue operation but power control may not work."
+        )
 
     # Create MQTT client instance
     mqtt_client = mqtt.Client()
