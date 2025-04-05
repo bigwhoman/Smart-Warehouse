@@ -10,7 +10,7 @@ from kasa import Discover
 
 async def main():
     dev = await Discover.discover_single(
-        "10.68.147.203", username="m.sabramooz77@gmail.com", password="mohammadreza1717"
+        "172.20.10.2", username="m.sabramooz77@gmail.com", password="mohammadreza1717"
     )
     await dev.turn_on()
     await dev.update()

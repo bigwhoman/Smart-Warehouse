@@ -9,7 +9,7 @@ from kasa import Discover
 # find ip using kasa discover
 async def discover_device():
     dev = await Discover.discover_single(
-        "10.68.147.203",
+        "172.20.10.2",
         username="m.sabramooz77@gmail.com",
         password="mohammadreza1717",
     )
@@ -37,7 +37,7 @@ async def PowerConsumption(dev):
             try:
                 payload = {"code": "AAs12", "energy": total_energy}
                 response = requests.post(
-                    "http://10.68.147.191:8080/sendenergy", json=payload
+                    "http://172.20.10.5:8080/sendenergy", json=payload
                 )
                 print(f"Data sent to server: {payload}")
                 print(f"Server response: {response.status_code}")
