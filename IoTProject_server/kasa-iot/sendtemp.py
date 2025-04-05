@@ -427,30 +427,36 @@ def on_message(client, userdata, msg):
 # Function to handle rental notifications
 def handle_rental_notification(payload):
     try:
-        # Parse the rental notification
-        data = json.loads(payload)
+        # The payload is a plain string with format: "username rented box_id"
+        payload = payload.strip()
 
-        # Check if this is a rental start message
-        if "current_user" in data and "box_id" in data:
-            # This is a rental start notification
-            user = data.get("current_user")
-            box_id = data.get("box_id")
+        if "rented" in payload:
+            # Split the message to extract user and box ID
+            parts = payload.split()
+            if len(parts) >= 3:  # Format: "username rented box_id"
+                user = parts[0]
+                box_id = parts[2] if len(parts) == 3 else " ".join(parts[2:])
 
-            logger.info(
-                f"Rental notification received: User {user} rented box {box_id}"
-            )
+                logger.info(
+                    f"Rental notification received: User {user} rented box {box_id}"
+                )
 
-            # Activate the system with this rental information
-            rental_info = {"user": user, "box_id": box_id, "start_time": time.time()}
-            activate_system(rental_info)
+                # Activate the system with this rental information
+                rental_info = {
+                    "user": user,
+                    "box_id": box_id,
+                    "start_time": time.time(),
+                }
+                activate_system(rental_info)
 
-        # Check if this is a rental end message
-        elif "end_rental" in data and data.get("end_rental") == True:
+        elif (
+            "end" in payload.lower()
+            or "stop" in payload.lower()
+            or "complete" in payload.lower()
+        ):
             logger.info("Rental end notification received")
             deactivate_system()
 
-    except json.JSONDecodeError:
-        logger.error("Failed to parse JSON rental notification")
     except Exception as e:
         logger.error(f"Error handling rental notification: {str(e)}")
 
