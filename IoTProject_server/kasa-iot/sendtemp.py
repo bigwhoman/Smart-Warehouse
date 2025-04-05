@@ -40,8 +40,8 @@ temperature_buffer = []
 flame_buffer = deque(maxlen=8)  # Track last 8 flame readings
 flame_count_since_last_publish = 0  # Counter for flame detections since last publish
 TEMP_BUFFER_SIZE = 10  # Number of temperature readings to average
-FLAME_THRESHOLD = 4  # Number of flame detections to trigger alert
-FLAME_PUBLISH_FREQUENCY = 3  # Publish flame status every 3 flame detections
+FLAME_THRESHOLD = 6  # Number of flame detections to trigger alert
+FLAME_PUBLISH_FREQUENCY = 2  # Publish flame status every 3 flame detections
 
 # Global variables
 mqtt_client = None  # Global client reference
