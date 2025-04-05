@@ -19,8 +19,9 @@ logger = logging.getLogger("temperature_monitor")
 MQTT_BROKER = "localhost"  # Change to your MQTT broker address
 MQTT_PORT = 1883
 MQTT_TOPIC = "chomp_topic"
-MQTT_ACTUATOR_TOPIC = "actuator_topic"  # New topic for publishing
+MQTT_ACTUATOR_TOPIC = "actuator_topic"  # Topic for publishing
 MQTT_CONTROL_TOPIC = "control_topic"  # Topic to receive control commands
+MQTT_NOTIFY_RENT_TOPIC = "notifyRent"  # Topic for rental notifications
 MQTT_USERNAME = None  # Set if your broker requires authentication
 MQTT_PASSWORD = None  # Set if your broker requires authentication
 
@@ -45,6 +46,8 @@ FLAME_PUBLISH_FREQUENCY = 3  # Publish flame status every 3 flame detections
 # Global variables
 mqtt_client = None  # Global client reference
 power_cutoff = False  # Flag to track if power is cut off
+system_active = False  # Flag to track if system is active (rental received)
+current_rental = None  # Store current rental information
 
 
 # Function to control smart plug via external script
@@ -85,19 +88,32 @@ def on_connect(client, userdata, flags, rc):
         # Subscribe to topics
         client.subscribe(MQTT_TOPIC)
         client.subscribe(MQTT_CONTROL_TOPIC)
-        logger.info(f"Subscribed to topics: {MQTT_TOPIC}, {MQTT_CONTROL_TOPIC}")
+        client.subscribe(MQTT_NOTIFY_RENT_TOPIC)  # Subscribe to rental notifications
+        logger.info(
+            f"Subscribed to topics: {MQTT_TOPIC}, {MQTT_CONTROL_TOPIC}, {MQTT_NOTIFY_RENT_TOPIC}"
+        )
+
+        # Turn off the smart plug initially
+        logger.info("Turning off smart plug initially...")
+        control_smart_plug("off")
+        logger.info("System is waiting for rental activation...")
     else:
         logger.error(f"Failed to connect to MQTT broker with code: {rc}")
 
 
 # Function to publish to actuator topic
 def publish_to_actuator(avg_temperature, flame_alert=False):
+    if not system_active:
+        logger.debug("System not active, skipping actuator publish")
+        return
+
     try:
         # Create payload for actuator
         actuator_data = {
             "average_temperature": avg_temperature,
             "flame_alert": flame_alert,
             "power_cutoff": power_cutoff,
+            "rental_info": current_rental,
         }
 
         # Convert to JSON string
@@ -119,6 +135,10 @@ def publish_to_actuator(avg_temperature, flame_alert=False):
 
 # Function to publish flame status to actuator topic
 def publish_flame_status(flame_detected):
+    if not system_active:
+        logger.debug("System not active, skipping flame status publish")
+        return
+
     global flame_count_since_last_publish
 
     try:
@@ -132,6 +152,7 @@ def publish_flame_status(flame_detected):
             flame_data = {
                 "flame_detected": flame_detected,
                 "power_cutoff": power_cutoff,
+                "rental_info": current_rental,
             }
 
             # Convert to JSON string
@@ -156,6 +177,10 @@ def publish_flame_status(flame_detected):
 
 # Function to handle power cutoff due to flame detection
 def handle_flame_power_cutoff():
+    if not system_active:
+        logger.debug("System not active, skipping power cutoff")
+        return
+
     global power_cutoff
 
     if not power_cutoff:
@@ -171,6 +196,12 @@ def handle_flame_power_cutoff():
 
 # Function to restore power
 def restore_power():
+    if not system_active:
+        logger.warning(
+            "System not active, power cannot be restored until rental is active"
+        )
+        return
+
     global power_cutoff
 
     if power_cutoff:
@@ -186,6 +217,10 @@ def restore_power():
 
 # Function to send temperature data to API
 def send_temperature_data(temperature):
+    if not system_active:
+        logger.debug("System not active, skipping temperature data send")
+        return
+
     try:
         # Prepare the data to send to the API
         api_data = {"code": API_CODE, "temperature": temperature}
@@ -211,6 +246,10 @@ def send_temperature_data(temperature):
 
 # Function to send flame alert
 def send_flame_alert():
+    if not system_active:
+        logger.debug("System not active, skipping flame alert")
+        return
+
     try:
         # Prepare the data to send flame alert
         api_data = {"code": API_CODE, "alert": "flame_up"}
@@ -232,6 +271,58 @@ def send_flame_alert():
         logger.error(f"Unexpected error: {str(e)}")
 
 
+# Function to activate the system upon rental
+def activate_system(rental_info):
+    global system_active, current_rental, temperature_buffer, flame_buffer, flame_count_since_last_publish, power_cutoff
+
+    # Store rental information
+    current_rental = rental_info
+
+    # Reset all buffers and counters
+    temperature_buffer = []
+    flame_buffer.clear()
+    flame_count_since_last_publish = 0
+    power_cutoff = False
+
+    # Turn on the smart plug
+    logger.info(f"Activating system for rental: {rental_info}")
+    success = control_smart_plug("on")
+
+    if success:
+        system_active = True
+        logger.info("System activated and power turned on")
+
+        # Publish initial status to actuator topic
+        publish_to_actuator(0, flame_alert=False)
+    else:
+        logger.error("Failed to activate system: could not turn on power")
+
+
+# Function to deactivate the system
+def deactivate_system():
+    global system_active, current_rental
+
+    if system_active:
+        logger.info("Deactivating system")
+
+        # Turn off the smart plug
+        success = control_smart_plug("off")
+
+        if success:
+            logger.info("System deactivated and power turned off")
+        else:
+            logger.error("Failed to turn off power during deactivation")
+
+        # Reset the system state
+        system_active = False
+        current_rental = None
+
+        # Clear all buffers
+        temperature_buffer.clear()
+        flame_buffer.clear()
+        flame_count_since_last_publish = 0
+
+
 # Callback for when a message is received from the server
 def on_message(client, userdata, msg):
     try:
@@ -239,13 +330,18 @@ def on_message(client, userdata, msg):
         payload = msg.payload.decode("utf-8")
         logger.info(f"Received message on topic {msg.topic}: {payload}")
 
+        # Handle rental notifications
+        if msg.topic == MQTT_NOTIFY_RENT_TOPIC:
+            handle_rental_notification(payload)
+            return
+
         # Handle control messages
         if msg.topic == MQTT_CONTROL_TOPIC:
             handle_control_message(payload)
             return
 
-        # Handle data messages from temperature topic
-        if msg.topic == MQTT_TOPIC:
+        # Handle data messages from temperature topic (only if system is active)
+        if msg.topic == MQTT_TOPIC and system_active:
             # Parse the JSON data
             data = json.loads(payload)
 
@@ -328,6 +424,37 @@ def on_message(client, userdata, msg):
         logger.error(f"Unexpected error: {str(e)}")
 
 
+# Function to handle rental notifications
+def handle_rental_notification(payload):
+    try:
+        # Parse the rental notification
+        data = json.loads(payload)
+
+        # Check if this is a rental start message
+        if "current_user" in data and "box_id" in data:
+            # This is a rental start notification
+            user = data.get("current_user")
+            box_id = data.get("box_id")
+
+            logger.info(
+                f"Rental notification received: User {user} rented box {box_id}"
+            )
+
+            # Activate the system with this rental information
+            rental_info = {"user": user, "box_id": box_id, "start_time": time.time()}
+            activate_system(rental_info)
+
+        # Check if this is a rental end message
+        elif "end_rental" in data and data.get("end_rental") == True:
+            logger.info("Rental end notification received")
+            deactivate_system()
+
+    except json.JSONDecodeError:
+        logger.error("Failed to parse JSON rental notification")
+    except Exception as e:
+        logger.error(f"Error handling rental notification: {str(e)}")
+
+
 # Function to handle control messages
 def handle_control_message(payload):
     try:
@@ -340,7 +467,11 @@ def handle_control_message(payload):
 
             if power_command == "on":
                 logger.info("Received command to turn power ON")
-                restore_power()
+                if system_active:
+                    restore_power()
+                else:
+                    logger.warning("Cannot turn power on: no active rental")
+
             elif power_command == "off":
                 logger.info("Received command to turn power OFF")
                 control_smart_plug("off")
@@ -351,6 +482,11 @@ def handle_control_message(payload):
             logger.info("Received command to reset flame alert")
             flame_buffer.clear()
             flame_count_since_last_publish = 0
+
+        # Check for system deactivation command
+        if data.get("deactivate_system", False):
+            logger.info("Received command to deactivate system")
+            deactivate_system()
 
     except json.JSONDecodeError:
         logger.error("Failed to parse JSON control message")
@@ -393,6 +529,8 @@ def main():
     except Exception as e:
         logger.error(f"Failed to connect to MQTT broker: {str(e)}")
     finally:
+        # Ensure power is off when the program exits
+        control_smart_plug("off")
         mqtt_client.disconnect()
         logger.info("Disconnected from MQTT broker")
 
