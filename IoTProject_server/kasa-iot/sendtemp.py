@@ -347,6 +347,7 @@ def on_message(client, userdata, msg):
 
             # Extract the temperature value and flame status
             temperature = data.get("temperature")
+            mqtt_client.publish("graph", temperature)
             device_id = data.get("id")
             flame_detected = data.get("flame", False)
 

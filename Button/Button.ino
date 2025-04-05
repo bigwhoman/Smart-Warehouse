@@ -334,7 +334,8 @@ void loop() {
 
   if (rentButton.justReleased()) {
     Serial.println("Rent button released");
-    rentButton.drawButton(false, "Processing...");
+    tft.fillScreen(TFT_BLACK);
+    rentButton.drawButton(false, "Wait");
     
     // Button has been released, initiate QR code download
     if (WiFi.status() == WL_CONNECTED) {
